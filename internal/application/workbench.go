@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"stage-rigging-clearance/internal/domain"
@@ -36,6 +37,57 @@ type Workbench struct {
 }
 
 func (s *Service) Workbench(ctx context.Context, sessionID string, auditLimit, auditOffset int) (Workbench, error) {
+	key := workbenchRequestKey{sessionID: sessionID, auditLimit: auditLimit, auditOffset: auditOffset}
+	return s.workbenchRequests.Do(ctx, key, func() (Workbench, error) {
+		return s.loadWorkbench(ctx, sessionID, auditLimit, auditOffset)
+	})
+}
+
+type workbenchRequestKey struct {
+	sessionID   string
+	auditLimit  int
+	auditOffset int
+}
+
+type workbenchRequest struct {
+	done   chan struct{}
+	result Workbench
+	err    error
+}
+
+type workbenchRequestGroup struct {
+	mu       sync.Mutex
+	inFlight map[workbenchRequestKey]*workbenchRequest
+}
+
+func (g *workbenchRequestGroup) Do(ctx context.Context, key workbenchRequestKey, load func() (Workbench, error)) (Workbench, error) {
+	g.mu.Lock()
+	if g.inFlight == nil {
+		g.inFlight = make(map[workbenchRequestKey]*workbenchRequest)
+	}
+	request, ok := g.inFlight[key]
+	if !ok {
+		request = &workbenchRequest{done: make(chan struct{})}
+		g.inFlight[key] = request
+		go func() {
+			request.result, request.err = load()
+			g.mu.Lock()
+			delete(g.inFlight, key)
+			close(request.done)
+			g.mu.Unlock()
+		}()
+	}
+	g.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return Workbench{}, ctx.Err()
+	case <-request.done:
+		return request.result, request.err
+	}
+}
+
+func (s *Service) loadWorkbench(ctx context.Context, sessionID string, auditLimit, auditOffset int) (Workbench, error) {
 	snap, err := s.store.Snapshot(ctx, sessionID)
 	if err != nil {
 		return Workbench{}, err

@@ -14,7 +14,10 @@ import (
 	"stage-rigging-clearance/internal/storage"
 )
 
-type Service struct{ store *storage.Store }
+type Service struct {
+	store             *storage.Store
+	workbenchRequests workbenchRequestGroup
+}
 
 func New(store *storage.Store) *Service { return &Service{store: store} }
 

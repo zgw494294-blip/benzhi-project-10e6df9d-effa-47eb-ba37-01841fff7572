@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"sort"
 	"time"
 
@@ -21,10 +22,23 @@ type certificateContent struct {
 	IssuedAt       string `json:"issuedAt"`
 }
 
+type certificateDigester struct {
+	hasher  hash.Hash
+	scratch []byte
+}
+
+var reusableCertificateDigester = certificateDigester{hasher: sha256.New()}
+
+func (d *certificateDigester) digest(content certificateContent) string {
+	d.scratch, _ = json.Marshal(content)
+	d.hasher.Reset()
+	_, _ = d.hasher.Write(d.scratch)
+	return hex.EncodeToString(d.hasher.Sum(nil))
+}
+
 func CertificateDigest(c domain.Certificate) string {
-	b, _ := json.Marshal(certificateContent{ID: c.ID, SessionID: c.SessionID, Sequence: c.Sequence, ManifestDigest: c.ManifestDigest, PreviousDigest: c.PreviousDigest, ApprovedBy: c.ApprovedBy, IssuedAt: c.IssuedAt.UTC().Format(time.RFC3339Nano)})
-	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:])
+	content := certificateContent{ID: c.ID, SessionID: c.SessionID, Sequence: c.Sequence, ManifestDigest: c.ManifestDigest, PreviousDigest: c.PreviousDigest, ApprovedBy: c.ApprovedBy, IssuedAt: c.IssuedAt.UTC().Format(time.RFC3339Nano)}
+	return reusableCertificateDigester.digest(content)
 }
 
 func SignCertificate(c domain.Certificate) domain.Certificate {

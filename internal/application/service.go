@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,7 +15,16 @@ import (
 	"stage-rigging-clearance/internal/storage"
 )
 
-type Service struct{ store *storage.Store }
+type inspectionPreflightCache struct {
+	mu        sync.Mutex
+	sessionID string
+	result    BatchInspectionPreflight
+}
+
+type Service struct {
+	store                    *storage.Store
+	inspectionPreflightCache inspectionPreflightCache
+}
 
 func New(store *storage.Store) *Service { return &Service{store: store} }
 

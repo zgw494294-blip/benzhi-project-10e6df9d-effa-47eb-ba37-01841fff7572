@@ -433,7 +433,25 @@ func (s *Service) PreflightBatchInspections(ctx context.Context, sessionID strin
 	if err = domain.RequireMutable(snap.Session); err != nil {
 		return BatchInspectionPreflight{}, err
 	}
-	return validateBatchInspections(snap, c.Entries, time.Now().UTC()), nil
+	cache := &s.inspectionPreflightCache
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if cache.sessionID == sessionID {
+		return cloneBatchInspectionPreflight(cache.result), nil
+	}
+	result := validateBatchInspections(snap, c.Entries, time.Now().UTC())
+	cache.sessionID = sessionID
+	cache.result = cloneBatchInspectionPreflight(result)
+	return cloneBatchInspectionPreflight(result), nil
+}
+
+func cloneBatchInspectionPreflight(value BatchInspectionPreflight) BatchInspectionPreflight {
+	cloned := BatchInspectionPreflight{Valid: value.Valid, Tasks: make([]TaskValidation, len(value.Tasks))}
+	for index, task := range value.Tasks {
+		cloned.Tasks[index] = task
+		cloned.Tasks[index].Errors = append([]string(nil), task.Errors...)
+	}
+	return cloned
 }
 
 type BatchInspectionCommand struct {

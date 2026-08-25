@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>舞台吊挂安全放行工作台</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="eyebrow">STAGE SAFETY / 演出前核验</span><h1>吊挂放行工作台</h1></div>
+    <div id="connection" class="connection">正在连接本机服务…</div>
+  </header>
+  <main>
+    <aside class="sidebar" aria-label="核验批次">
+      <button id="new-session" class="primary">＋ 新建核验批次</button>
+      <h2>演出批次</h2>
+      <div id="session-list" class="session-list"></div>
+    </aside>
+    <section class="workspace">
+      <div id="empty" class="empty"><p>选择一个批次开始核验，或新建演出批次。</p></div>
+      <div id="workbench" hidden>
+        <section class="hero card">
+          <div><span id="status" class="badge"></span><h2 id="production"></h2><p id="session-meta"></p></div>
+          <div class="version">事实版本 <strong id="version">—</strong><button id="edit-session">编辑批次</button></div>
+        </section>
+        <nav class="tabs" aria-label="工作阶段">
+          <button data-tab="plan" class="active">1 吊挂方案</button><button data-tab="inspect">2 现场检验</button><button data-tab="hazards">3 隐患整改</button><button data-tab="review">4 复核放行</button><button data-tab="audit">审计轨迹</button>
+        </nav>
+        <section id="tab-plan" class="tab active">
+          <div class="metrics"><article><span>构件</span><strong id="item-count">0</strong></article><article><span>计划载荷</span><strong id="planned-load">0 kg</strong></article><article><span>最小余量</span><strong id="margin">0 kg</strong></article></div>
+          <div class="section-head"><div><h3>吊挂构件</h3><p>登记、批量导入并在送检前修订构件；所有载荷整体校验。</p></div><div class="actions"><button id="bulk-items">批量录入</button><button id="add-item">＋ 登记构件</button></div></div>
+          <div id="items" class="cards"></div>
+        </section>
+        <section id="tab-inspect" class="tab">
+          <div class="section-head"><div><h3>逐项检验</h3><p>可按位置、类型筛选并勾选待检任务原子提交。</p></div><div id="coverage" class="progress-label"></div></div>
+          <div class="toolbar"><input id="task-filter" placeholder="筛选位置或构件类型"><button id="batch-inspections">批量录入所选任务</button></div>
+          <div class="progress"><i id="coverage-bar"></i></div><div id="tasks" class="task-grid"></div>
+        </section>
+        <section id="tab-hazards" class="tab">
+          <div class="section-head"><div><h3>隐患与整改版本</h3><p>保留每轮整改、复检和责任转派，失败复检返回待整改。</p></div><div id="hazard-summary"></div></div><div class="toolbar"><input id="hazard-assignee" placeholder="按责任人筛选"><select id="hazard-filter"><option value="">全部级别</option><option value="blocking">阻断级</option><option value="advisory">提示级</option><option value="overdue">仅逾期</option></select><select id="hazard-status"><option value="">全部状态</option><option value="open">待整改</option><option value="awaiting_reinspection">待复检</option><option value="closed">已关闭</option></select></div><div id="hazards" class="cards"></div>
+        </section>
+        <section id="tab-review" class="tab">
+          <div class="review-grid"><article class="card"><h3>冻结前置检查</h3><div id="readiness"></div><div id="preview"></div><button id="freeze" class="primary">生成冻结预演</button></article><article class="card"><h3>放行凭据</h3><div id="certificate"></div><button id="issue" class="primary">签发开演放行凭据</button><hr><h4>独立检索</h4><div class="toolbar"><input id="certificate-query" placeholder="全局序号、摘要或摘要前缀"><button id="search-certificate">查询</button></div><div id="certificate-search"></div></article></div>
+        </section>
+        <section id="tab-audit" class="tab"><div class="section-head"><div><h3>按时间排序的审计轨迹</h3><p>每次事实变更均与操作者和版本一起保存。</p></div></div><ol id="audit" class="timeline"></ol></section>
+      </div>
+    </section>
+  </main>
+  <dialog id="modal"><form id="modal-form" method="dialog"><header><h2 id="modal-title"></h2><button type="button" id="modal-close" aria-label="关闭">×</button></header><div id="modal-fields"></div><p id="modal-error" class="error" role="alert"></p><footer><button type="button" id="modal-cancel">取消</button><button type="submit" class="primary">确认提交</button></footer></form></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

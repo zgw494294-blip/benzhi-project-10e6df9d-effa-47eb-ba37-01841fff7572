@@ -48,6 +48,19 @@ func (s *Store) SaveReviewToken(ctx context.Context, token ReviewToken) error {
 	return tx.Commit()
 }
 
+func (s *Store) ConsumeReviewToken(ctx context.Context, token, sessionID string, expectedVersion int64, manifestDigest, confirmations, reviewNote, reviewer string) error {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	unit := &Unit{tx: tx, now: time.Now().UTC()}
+	if err = unit.ConsumeReviewToken(token, sessionID, expectedVersion, manifestDigest, confirmations, reviewNote, reviewer); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (u *Unit) ConsumeReviewToken(token, sessionID string, expectedVersion int64, manifestDigest, confirmations, reviewNote, reviewer string) error {
 	var savedSession, digest, expires, consumed string
 	var version int64

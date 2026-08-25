@@ -559,6 +559,25 @@ func (s *Service) Freeze(ctx context.Context, sessionID string, c FreezeCommand)
 			return FreezeResult{}, fmt.Errorf("%w: 复核确认项 %s 未勾选", domain.ErrInvalidInput, name)
 		}
 	}
+	preview, err := s.store.Snapshot(ctx, sessionID)
+	if err != nil {
+		return FreezeResult{}, err
+	}
+	if err = domain.RequireMutable(preview.Session); err != nil {
+		return FreezeResult{}, err
+	}
+	ready := domain.EvaluateReadiness(preview)
+	if !ready.Ready {
+		return FreezeResult{}, fmt.Errorf("%w: %s", domain.ErrIncomplete, strings.Join(ready.BlockingReasons, "；"))
+	}
+	digest, _, err := integrity.ManifestDigest(preview)
+	if err != nil {
+		return FreezeResult{}, err
+	}
+	confirmations, _ := json.Marshal(c.Confirmations)
+	if err = s.store.ConsumeReviewToken(ctx, c.ReviewToken, sessionID, c.ExpectedVersion, digest, string(confirmations), strings.TrimSpace(c.ReviewNote), c.Actor); err != nil {
+		return FreezeResult{}, err
+	}
 	b, _, err := s.store.Command(ctx, commandMeta(sessionID, c.WriteMeta, c), func(u *storage.Unit) (storage.CommandResult, error) {
 		snap, err := u.Snapshot(sessionID)
 		if err != nil {
@@ -573,10 +592,6 @@ func (s *Service) Freeze(ctx context.Context, sessionID string, c FreezeCommand)
 		}
 		digest, content, err := integrity.ManifestDigest(snap)
 		if err != nil {
-			return storage.CommandResult{}, err
-		}
-		confirmations, _ := json.Marshal(c.Confirmations)
-		if err = u.ConsumeReviewToken(c.ReviewToken, sessionID, c.ExpectedVersion, digest, string(confirmations), strings.TrimSpace(c.ReviewNote), c.Actor); err != nil {
 			return storage.CommandResult{}, err
 		}
 		if err = u.Freeze(sessionID, digest, content); err != nil {

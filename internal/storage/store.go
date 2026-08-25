@@ -10,12 +10,17 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"stage-rigging-clearance/internal/domain"
 )
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db                *sql.DB
+	releasedMu        sync.RWMutex
+	releasedSnapshots map[string]domain.Snapshot
+}
 
 type CommandMeta struct {
 	IdempotencyKey  string
@@ -246,7 +251,23 @@ type querier interface {
 }
 
 func (s *Store) Snapshot(ctx context.Context, id string) (domain.Snapshot, error) {
-	return loadSnapshot(s.db, id)
+	s.releasedMu.RLock()
+	cached, ok := s.releasedSnapshots[id]
+	s.releasedMu.RUnlock()
+	if ok {
+		return cached, nil
+	}
+
+	snapshot, err := loadSnapshot(s.db, id)
+	if err != nil {
+		return domain.Snapshot{}, err
+	}
+	if snapshot.Session.Status == domain.StatusReleased {
+		s.releasedMu.Lock()
+		s.releasedSnapshots[id] = snapshot
+		s.releasedMu.Unlock()
+	}
+	return snapshot, nil
 }
 
 func loadSnapshot(q querier, id string) (domain.Snapshot, error) {

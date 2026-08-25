@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	_ "modernc.org/sqlite"
+
+	"stage-rigging-clearance/internal/domain"
 )
 
 func Open(path string) (*Store, error) {
@@ -19,7 +21,7 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	s := &Store{db: db}
+	s := &Store{db: db, releasedSnapshots: make(map[string]domain.Snapshot)}
 	if err := s.initialize(context.Background()); err != nil {
 		db.Close()
 		return nil, err

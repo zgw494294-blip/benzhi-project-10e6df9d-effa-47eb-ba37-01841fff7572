@@ -19,7 +19,7 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	s := &Store{db: db}
+	s := &Store{db: db, idempotencyCache: make(map[string]idempotencyCacheEntry)}
 	if err := s.initialize(context.Background()); err != nil {
 		db.Close()
 		return nil, err

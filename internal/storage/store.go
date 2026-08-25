@@ -15,7 +15,16 @@ import (
 	"stage-rigging-clearance/internal/domain"
 )
 
-type Store struct{ db *sql.DB }
+type idempotencyCacheEntry struct {
+	requestDigest string
+	response      []byte
+	hits          uint64
+}
+
+type Store struct {
+	db               *sql.DB
+	idempotencyCache map[string]idempotencyCacheEntry
+}
 
 type CommandMeta struct {
 	IdempotencyKey  string
@@ -48,6 +57,14 @@ func (s *Store) Command(ctx context.Context, meta CommandMeta, fn func(*Unit) (C
 	if len(strings.TrimSpace(meta.IdempotencyKey)) < 8 || len(meta.IdempotencyKey) > 128 {
 		return nil, false, fmt.Errorf("%w: idempotencyKey 长度须为 8 至 128", domain.ErrInvalidInput)
 	}
+	if cached, ok := s.idempotencyCache[meta.IdempotencyKey]; ok {
+		cached.hits++
+		s.idempotencyCache[meta.IdempotencyKey] = cached
+		if cached.requestDigest != meta.RequestDigest {
+			return nil, false, domain.ErrIdempotency
+		}
+		return append([]byte(nil), cached.response...), true, nil
+	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
 		return nil, false, err
@@ -63,7 +80,8 @@ func (s *Store) Command(ctx context.Context, meta CommandMeta, fn func(*Unit) (C
 		if err := tx.Commit(); err != nil {
 			return nil, false, err
 		}
-		return savedResponse, true, nil
+		s.idempotencyCache[meta.IdempotencyKey] = idempotencyCacheEntry{requestDigest: savedDigest, response: append([]byte(nil), savedResponse...), hits: 1}
+		return append([]byte(nil), savedResponse...), true, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, false, err
@@ -112,7 +130,8 @@ func (s *Store) Command(ctx context.Context, meta CommandMeta, fn func(*Unit) (C
 	if err = tx.Commit(); err != nil {
 		return nil, false, err
 	}
-	return result.Response, false, nil
+	s.idempotencyCache[meta.IdempotencyKey] = idempotencyCacheEntry{requestDigest: meta.RequestDigest, response: append([]byte(nil), result.Response...)}
+	return append([]byte(nil), result.Response...), false, nil
 }
 
 func (u *Unit) CreateSession(s domain.Session) error {

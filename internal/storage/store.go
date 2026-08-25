@@ -10,12 +10,19 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"stage-rigging-clearance/internal/domain"
 )
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db *sql.DB
+
+	certificateCacheMu    sync.Mutex
+	certificateCacheCount int
+	certificateCache      []domain.Certificate
+}
 
 type CommandMeta struct {
 	IdempotencyKey  string
@@ -437,6 +444,18 @@ func (s *Store) Manifest(ctx context.Context, sessionID string) (string, []byte,
 }
 
 func (s *Store) CertificateChain(ctx context.Context) ([]domain.Certificate, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM certificates`).Scan(&count); err != nil {
+		return nil, err
+	}
+	s.certificateCacheMu.Lock()
+	if s.certificateCache != nil && s.certificateCacheCount == count {
+		cached := append([]domain.Certificate(nil), s.certificateCache...)
+		s.certificateCacheMu.Unlock()
+		return cached, nil
+	}
+	s.certificateCacheMu.Unlock()
+
 	rows, err := s.db.QueryContext(ctx, `SELECT id,session_id,sequence,manifest_digest,previous_digest,certificate_digest,approved_by,issued_at FROM certificates ORDER BY sequence`)
 	if err != nil {
 		return nil, err
@@ -452,7 +471,14 @@ func (s *Store) CertificateChain(ctx context.Context) ([]domain.Certificate, err
 		certificate.IssuedAt = parseTime(issuedAt)
 		certificates = append(certificates, certificate)
 	}
-	return certificates, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	s.certificateCacheMu.Lock()
+	s.certificateCacheCount = count
+	s.certificateCache = append([]domain.Certificate(nil), certificates...)
+	s.certificateCacheMu.Unlock()
+	return certificates, nil
 }
 
 func (s *Store) SchemaVersion(ctx context.Context) (int, error) {

@@ -2,11 +2,18 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 
 	"stage-rigging-clearance/internal/domain"
 )
+
+var certificateStatementCache = struct {
+	sync.Mutex
+	statements map[string]*sql.Stmt
+}{statements: make(map[string]*sql.Stmt)}
 
 type CertificateMatch struct {
 	Certificate domain.Certificate `json:"certificate"`
@@ -43,7 +50,19 @@ func (s *Store) SearchCertificates(ctx context.Context, sequence *int64, digest,
 		args = append(args, arg)
 	}
 	args = append(args, limit, offset)
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	certificateStatementCache.Lock()
+	statement := certificateStatementCache.statements[query]
+	if statement == nil {
+		var err error
+		statement, err = s.db.PrepareContext(ctx, query)
+		if err != nil {
+			certificateStatementCache.Unlock()
+			return nil, err
+		}
+		certificateStatementCache.statements[query] = statement
+	}
+	certificateStatementCache.Unlock()
+	rows, err := statement.QueryContext(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
